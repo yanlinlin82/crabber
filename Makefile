@@ -4,18 +4,20 @@ MODULES = $(patsubst %.cpp,%,$(wildcard *.cpp))
 CXX = g++
 CXXFLAGS = -Wall -O2 -std=c++11
 
+GEN_VERSION := $(shell bash version.sh version.h.in version.h)
+
 .PHONY: all clean
 
 all: ${TARGET}
 
 clean:
-	@rm -fv ${TARGET} ${MODULES:%=%.d} ${MODULES:%=%.o}
+	@rm -fv ${TARGET} ${MODULES:%=%.d} ${MODULES:%=%.o} version.h
 
 ${TARGET}: ${MODULES:%=%.o}
 	${CXX} ${CXXFLAGS} -o $@ $^
 
 %.o: %.cpp
-	${CXX} ${CXXFLAGS} -c -o $@ $^
+	${CXX} -c ${CXXFLAGS} -o $@ $<
 
 ifneq ("${MAKECMDGOALS}", "clean")
 sinclude ${MODULES:%=%.d}

@@ -30,3 +30,4 @@ crabber
 
 # Dependencies
 *.d
+version.h

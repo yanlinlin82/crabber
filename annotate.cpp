@@ -5,63 +5,8 @@
 #include <map>
 #include <cassert>
 #include "annotate.h"
-
-std::string trim_left(const std::string& str, const std::string& drop = " \t")
-{
-	std::string::size_type pos = str.find_first_not_of(drop);
-	if (pos == std::string::npos) {
-		return "";
-	}
-	return str.substr(pos);
-}
-
-std::string trim_right(const std::string& str, const std::string& drop = " \t")
-{
-	std::string::size_type pos = str.find_last_not_of(drop);
-	if (pos == std::string::npos) {
-		return "";
-	}
-	return str.substr(0, pos + 1);
-}
-
-std::string trim(const std::string& str, const std::string& drop = " \t")
-{
-	return trim_left(trim_right(str, drop), drop);
-}
-
-static bool LoadFasta(const std::string& filename, std::map<std::string, std::string>& ref)
-{
-	std::ifstream file(filename, std::ios::in);
-	if (!file.is_open()) {
-		std::cerr << "Error: Can not open file '" << filename << "'!" << std::endl;
-		return false;
-	}
-
-	//std::cerr << "Loading fasta '" << filename << "'" << std::endl;
-	std::string chrom;
-	std::string line;
-	while (std::getline(file, line)) {
-		if (line.empty()) continue;
-		if (line[0] == '>') {
-			chrom = trim_left(line.substr(1));
-			std::string::size_type pos = chrom.find_first_of(" \t");
-			if (pos != std::string::npos) {
-				chrom = chrom.substr(0, pos);
-			}
-			//std::cerr << "  loading '" << chrom << "'\r" << std::flush;
-		} else {
-			ref[chrom] += trim(line);
-		}
-	}
-	//std::cerr << "Total " << ref.size() << " sequence(s) loaded" << std::endl;
-	file.close();
-#if 0
-	for (auto it = ref.begin(); it != ref.end(); ++it) {
-		std::cout << it->first << '\t' << it->second.size() << std::endl;
-	}
-#endif
-	return true;
-}
+#include "String.h"
+#include "Fasta.h"
 
 void Split(const char* s, size_t* pos, size_t count, char sep)
 {
@@ -228,7 +173,7 @@ int GetTxPosRev(const std::vector<std::pair<int, int>>& exons, int pos)
 	throw std::runtime_error("bad pos (" + std::to_string(pos) + " < " + std::to_string(exons.front().first) + ")");
 }
 
-bool Convert(const std::string& chrom, const Transcript& trans, int pos, const std::string& ref, const std::string alt, const std::string& seq)
+bool Convert(const std::string& chrom, const Transcript& trans, int pos, const std::string& ref, const std::string alt, const Fasta& fa)
 {
 #if 0
 	static bool firstTime = true;
@@ -363,20 +308,15 @@ bool Convert(const std::string& chrom, const Transcript& trans, int pos, const s
 	}
 
 	//assert(ref == seq.substr(pos, 1));
-	res += std::toupper(seq.substr(pos, 1)[0]);
-	res += ">" + alt;
+	res += fa.GetSeq(chrom, trans.txStart_ + pos, 1) + ">" + alt;
 
 	std::cout << chrom << "\t" << trans.txStart_ + pos + 1 << "\t" << trans.strand_ << "\t" << trans.name_ << "\t" << trans.name2_ << "\t" << res << "\t" << type << "\t" << type2 << std::endl;
 	return true;
 }
 
 bool ProcessItem(const std::string& chrom, int pos, const std::string& alleleRef, const std::string& alleleAlt,
-		const std::map<std::string, std::vector<Transcript>>& data,
-		const std::map<std::string, std::string>& ref)
+		const std::map<std::string, std::vector<Transcript>>& data, const Fasta& fa)
 {
-	//std::cout << chrom << '\t' << pos << '\t' << alleleRef << '\t' << alleleAlt << std::endl;
-	//std::cout << "Process: " << chrom << ':' << pos << ',' << alleleRef << '>' << alleleAlt << std::endl;
-
 	auto it = data.find(chrom);
 	if (it != data.end()) {
 		auto trans = it->second;
@@ -385,13 +325,12 @@ bool ProcessItem(const std::string& chrom, int pos, const std::string& alleleRef
 			if (pos >= trans[i].txStart_ && pos < trans[i].txEnd_) {
 				//std::cerr << "Found in " << trans[i].name_ << " (" << chrom << ':' << trans[i].txStart_ << "-" << trans[i].txEnd_ << ")" << std::endl;
 
-				auto it2 = ref.find(chrom);
-				if (it2 == ref.end()) {
+				if (!fa.Has(chrom)) {
 					std::cerr << "Can not found sequence '" << chrom << "' in ref fasta" << std::endl;
 					return false;
 				}
 
-				Convert(chrom, trans[i], pos - trans[i].txStart_, alleleRef, alleleAlt, it2->second.substr(trans[i].txStart_, trans[i].txEnd_));
+				Convert(chrom, trans[i], pos - trans[i].txStart_, alleleRef, alleleAlt, fa);
 				found = true;
 			}
 		}
@@ -403,8 +342,7 @@ bool ProcessItem(const std::string& chrom, int pos, const std::string& alleleRef
 }
 
 bool Process(const std::string& filename,
-		const std::map<std::string, std::vector<Transcript>>& data,
-		const std::map<std::string, std::string>& ref)
+		const std::map<std::string, std::vector<Transcript>>& data, const Fasta& fa)
 {
 	std::ifstream file(filename, std::ios::in);
 	if (!file.is_open()) {
@@ -429,7 +367,7 @@ bool Process(const std::string& filename,
 			std::string alleleRef = GetField(line, 3, pos);
 			std::string alleleAlt = GetField(line, 4, pos);
 
-			ProcessItem(chrom, genomePos - 1, alleleRef, alleleAlt, data, ref);
+			ProcessItem(chrom, genomePos - 1, alleleRef, alleleAlt, data, fa);
 		} catch (const std::exception& e) {
 			std::cerr << "Unexpected error in line " << lineNo << " of file '" << filename << "'! " << e.what() << std::endl;
 			file.close();
@@ -441,27 +379,28 @@ bool Process(const std::string& filename,
 	return true;
 }
 
+static void PrintUsage()
+{
+	std::cout << "\n"
+		"Usage:  crabber annotate <x.vcf> <refGene.tsv> <ref.fa>\n"
+		"\n"
+		"Input:\n"
+		"   <x.vcf>         input SNV list in VCF format\n"
+		"   <refGene.tsv>   track data downloaded from UCSC table browser\n"
+		"   <ref.fa>        reference genome in FASTA format\n"
+		<< std::endl;
+}
+
 int main_annotate(int argc, char* const argv[])
 {
 	std::vector<std::string> args(argv, argv + argc);
 	if (args.size() < 4) {
-		std::cout << "\n"
-			"Usage:  crabber annotate <x.vcf> <refGene.tsv> <ref.fa>\n"
-			"\n"
-			"Input:\n"
-			"   <x.vcf>         input SNV list in VCF format\n"
-			"   <refGene.tsv>   track data downloaded from UCSC table browser\n"
-			"   <ref.fa>        reference genome in FASTA format\n"
-			<< std::endl;
+		PrintUsage();
 		return 1;
 	}
 
-	//std::cout << "fasta: " << args[3] << std::endl;
-	//std::cout << "refGene: " << args[2] << std::endl;
-	//std::cout << "vcf: " << args[1] << std::endl;
-
-	std::map<std::string, std::string> ref;
-	if (!LoadFasta(args[3], ref)) {
+	Fasta fa;
+	if (!fa.Load(args[3])) {
 		return 1;
 	}
 
@@ -470,7 +409,7 @@ int main_annotate(int argc, char* const argv[])
 		return 1;
 	}
 
-	if (!Process(args[1], data, ref)) {
+	if (!Process(args[1], data, fa)) {
 		return 1;
 	}
 	return 0;

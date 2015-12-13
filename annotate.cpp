@@ -7,69 +7,8 @@
 #include "annotate.h"
 #include "String.h"
 #include "Fasta.h"
-
-void Split(const char* s, size_t* pos, size_t count, char sep)
-{
-	*pos++ = 0;
-	--count;
-
-	size_t i;
-	for (i = 0; s[i] && count > 0; ++i) {
-		if (s[i] == sep) {
-			*pos++ = i + 1;
-			--count;
-		}
-	}
-	if (count > 0) {
-		*pos = i;
-	}
-}
-
-std::string GetField(const std::string& line, size_t index, size_t* pos)
-{
-	return line.substr(pos[index], pos[index + 1] - pos[index] - 1);
-}
-
-class Transcript
-{
-public:
-	Transcript(): txStart_(0), txEnd_(0) { }
-
-	Transcript(const std::string& name, const std::string& name2, int txStart, int txEnd):
-		name_(name), name2_(name2), txStart_(txStart), txEnd_(txEnd)
-	{
-	}
-
-	bool SetExons(int exonCount, const std::string& exonStarts, const std::string& exonEnds);
-public:
-	std::string name_;
-	std::string name2_;
-	std::string strand_;
-	int txStart_;
-	int txEnd_;
-	int cdsStart_;
-	int cdsEnd_;
-	int exonCount_;
-	std::string exonStarts_;
-	std::string exonEnds_;
-	std::vector<std::pair<int, int>> exons_;
-};
-
-bool Transcript::SetExons(int exonCount, const std::string& exonStarts, const std::string& exonEnds)
-{
-	std::vector<size_t> pos, pos2;
-	pos.resize(exonCount + 1);
-	pos2.resize(exonCount + 1);
-
-	Split(exonStarts.c_str(), &pos[0], exonCount + 1, ',');
-	Split(exonEnds.c_str(), &pos2[0], exonCount + 1, ',');
-	for (int i = 0; i < exonCount; ++i) {
-		exons_.push_back(std::make_pair(
-					stoi(GetField(exonStarts.c_str(), i, &pos[0])) - txStart_,
-					stoi(GetField(exonEnds.c_str(), i, &pos2[0])) - txStart_));
-	}
-	return true;
-}
+#include "LineSplit.h"
+#include "Transcript.h"
 
 bool LoadRefGene(const std::string& filename, std::map<std::string, std::vector<Transcript>>& data)
 {
@@ -95,25 +34,25 @@ bool LoadRefGene(const std::string& filename, std::map<std::string, std::vector<
 
 		if (line.empty() || line[0] == '#') continue;
 
-		size_t pos[20] = { };
-		Split(line.c_str(), pos, sizeof(pos) / sizeof(pos[0]), '\t');
+		LineSplit sp;
+		sp.Split(line, '\t');
 
 		try {
-			std::string cdsStartStat = GetField(line, 13, pos);
-			std::string cdsEndStat = GetField(line, 14, pos);
+			std::string cdsStartStat = sp.GetField(13);
+			std::string cdsEndStat = sp.GetField(14);
 			if (cdsStartStat != "cmpl" || cdsEndStat != "cmpl") continue;
 
-			std::string name = GetField(line, 1, pos);
-			std::string name2 = GetField(line, 12, pos);
-			std::string chrom = GetField(line, 2, pos);
-			std::string strand = GetField(line, 3, pos);
-			int txStart = stoi(GetField(line, 4, pos));
-			int txEnd = stoi(GetField(line, 5, pos));
-			int cdsStart = stoi(GetField(line, 6, pos));
-			int cdsEnd = stoi(GetField(line, 7, pos));
-			int exonCount = stoi(GetField(line, 8, pos));
-			std::string exonStarts = GetField(line, 9, pos);
-			std::string exonEnds = GetField(line, 10, pos);
+			std::string name = sp.GetField(1);
+			std::string name2 = sp.GetField(12);
+			std::string chrom = sp.GetField(2);
+			std::string strand = sp.GetField(3);
+			int txStart = stoi(sp.GetField(4));
+			int txEnd = stoi(sp.GetField(5));
+			int cdsStart = stoi(sp.GetField(6));
+			int cdsEnd = stoi(sp.GetField(7));
+			int exonCount = stoi(sp.GetField(8));
+			std::string exonStarts = sp.GetField(9);
+			std::string exonEnds = sp.GetField(10);
 
 			Transcript item(name, name2, txStart, txEnd);
 			item.strand_ = strand;
@@ -146,14 +85,14 @@ int GetTxPos(const std::vector<std::pair<int, int>>& exons, int pos)
 		int start = exons[i].first;
 		int end = exons[i].second;
 		if (pos < start) {
-			throw std::runtime_error("bad pos (" + std::to_string(pos) + " < " + std::to_string(start) + ")");
+			throw std::runtime_error("GetTxPos - bad pos (" + std::to_string(pos) + " < " + std::to_string(start) + ")");
 		}
 		if (pos < end) {
 			return count + (pos - start);
 		}
 		count += end - start;
 	}
-	throw std::runtime_error("bad pos (" + std::to_string(pos) + " >= " + std::to_string(exons.back().second) + ")");
+	throw std::runtime_error("GetTxPos - bad pos (" + std::to_string(pos) + " >= " + std::to_string(exons.back().second) + ")");
 }
 
 int GetTxPosRev(const std::vector<std::pair<int, int>>& exons, int pos)
@@ -163,14 +102,14 @@ int GetTxPosRev(const std::vector<std::pair<int, int>>& exons, int pos)
 		int start = exons[i - 1].first;
 		int end = exons[i - 1].second;
 		if (pos >= end) {
-			throw std::runtime_error("bad pos (" + std::to_string(pos) + " >= " + std::to_string(end) + ")");
+			throw std::runtime_error("GetTxPosRev - bad pos (" + std::to_string(pos) + " >= " + std::to_string(end) + ")");
 		}
 		if (pos >= start) {
 			return count + (end - pos);
 		}
 		count += end - start;
 	}
-	throw std::runtime_error("bad pos (" + std::to_string(pos) + " < " + std::to_string(exons.front().first) + ")");
+	throw std::runtime_error("GetTxPosRev - bad pos (" + std::to_string(pos) + " < " + std::to_string(exons.front().first) + ")");
 }
 
 const char* CODON_TABLE[4][4][4] = {
@@ -478,8 +417,8 @@ bool Convert(const std::string& chrom, const Transcript& trans, int pos, const s
 						std::string base3 = CompBase(fa.GetSeq(chrom, trans.txStart_ + pos));
 
 						int pos2 = pos + 1;
-						int index = i;
-						if (pos2 >= exons[i].second) {
+						int index = i - 1;
+						if (pos2 >= exons[index].second) {
 							++index;
 							assert(static_cast<size_t>(index) < exons.size());
 							pos2 = exons[index].first;
@@ -503,18 +442,19 @@ bool Convert(const std::string& chrom, const Transcript& trans, int pos, const s
 						mutType = GetMutType(aa1, aa2);
 					} else if (mutPos % 3 == 1) {
 						std::string base2 = CompBase(fa.GetSeq(chrom, trans.txStart_ + pos));
-
 						int pos2 = pos - 1;
-						if (pos2 < exons[i].first) {
-							assert(i > 0);
-							pos2 = exons[i - 1].second - 1;
+						int index = i - 1;
+						if (pos2 < exons[index].first) {
+							assert(index > 0);
+							pos2 = exons[index - 1].second - 1;
 						}
 						std::string base3 = CompBase(fa.GetSeq(chrom, trans.txStart_ + pos2));
 
 						int pos3 = pos + 1;
-						if (pos3 >= exons[i].second) {
-							assert(i + 1 < exons.size());
-							pos3 = exons[i + 1].first;
+						index = i - 1;
+						if (pos3 >= exons[index].second) {
+							assert(index + 1 < static_cast<int>(exons.size()));
+							pos3 = exons[index + 1].first;
 						}
 						std::string base1 = CompBase(fa.GetSeq(chrom, trans.txStart_ + pos3));
 
@@ -529,7 +469,7 @@ bool Convert(const std::string& chrom, const Transcript& trans, int pos, const s
 						std::string base1 = CompBase(fa.GetSeq(chrom, trans.txStart_ + pos));
 
 						int pos2 = pos - 1;
-						int index = i;
+						int index = i - 1;
 						if (pos2 < exons[index].first) {
 							--index;
 							assert(index >= 0);
@@ -611,14 +551,14 @@ bool Process(const std::string& filename,
 		++lineNo;
 		if (line.empty() || line[0] == '#') continue;
 
-		size_t pos[20] = { };
-		Split(line.c_str(), pos, sizeof(pos) / sizeof(pos[0]), '\t');
+		LineSplit sp;
+		sp.Split(line, '\t');
 
 		try {
-			std::string chrom = GetField(line, 0, pos);
-			int genomePos = stoi(GetField(line, 1, pos));
-			std::string alleleRef = GetField(line, 3, pos);
-			std::string alleleAlt = GetField(line, 4, pos);
+			std::string chrom = sp.GetField(0);
+			int genomePos = stoi(sp.GetField(1));
+			std::string alleleRef = sp.GetField(3);
+			std::string alleleAlt = sp.GetField(4);
 
 			ProcessItem(chrom, genomePos - 1, alleleRef, alleleAlt, data, fa);
 		} catch (const std::exception& e) {

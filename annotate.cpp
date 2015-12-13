@@ -173,6 +173,76 @@ int GetTxPosRev(const std::vector<std::pair<int, int>>& exons, int pos)
 	throw std::runtime_error("bad pos (" + std::to_string(pos) + " < " + std::to_string(exons.front().first) + ")");
 }
 
+const char* CODON_TABLE[4][4][4] = {
+	{
+		{ "F", "F", "L", "L" }, { "S", "S", "S", "S" },
+		{ "Y", "Y", "*", "*" }, { "C", "C", "*", "W" },
+	},
+	{
+		{ "L", "L", "L", "L" }, { "P", "P", "P", "P" },
+		{ "H", "H", "Q", "Q" }, { "R", "R", "R", "R" },
+	},
+	{
+		{ "I", "I", "I", "M" }, { "T", "T", "T", "T" },
+		{ "N", "N", "K", "K" }, { "S", "S", "R", "R" },
+	},
+	{
+		{ "V", "V", "V", "V" }, { "A", "A", "A", "A" },
+		{ "D", "D", "E", "E" }, { "G", "G", "G", "G" },
+	},
+};
+
+const char* CODON_TABLE_3[4][4][4] = {
+	{
+		{ "Phe", "Phe", "Leu", "Leu" }, { "Ser", "Ser", "Ser", "Ser" },
+		{ "Tyr", "Tyr", "*", "*" }, { "Cys", "Cys", "*", "Trp" }
+	},
+	{
+		{ "Leu", "Leu", "Leu", "Leu" }, { "Pro", "Pro", "Pro", "Pro" },
+		{ "His", "His", "Gln", "Gln" }, { "Arg", "Arg", "Arg", "Arg" },
+	},
+	{
+		{ "Ile", "Ile", "Ile", "Met" }, { "Thr", "Thr", "Thr", "Thr" },
+		{ "Asn", "Asn", "Lys", "Lys" }, { "Ser", "Ser", "Arg", "Arg" },
+	},
+	{
+		{ "Val", "Val", "Val", "Val" }, { "Ala", "Ala", "Ala", "Ala" },
+		{ "Asp", "Asp", "Asp", "Asp" }, { "Gly", "Gly", "Gly", "Gly" },
+	},
+};
+
+int GetBaseIndex(char c)
+{
+	if (c == 'T' || c == 't') return 0;
+	if (c == 'C' || c == 'c') return 1;
+	if (c == 'A' || c == 'a') return 2;
+	if (c == 'G' || c == 'g') return 3;
+	throw std::runtime_error("Invalid base '" + std::string(1, c) + "'");
+}
+
+std::string BaseToAA(const std::string& codon)
+{
+	return CODON_TABLE[GetBaseIndex(codon[0])][GetBaseIndex(codon[1])][GetBaseIndex(codon[2])];
+}
+
+std::string BaseToAA3(const std::string& codon)
+{
+	return CODON_TABLE_3[GetBaseIndex(codon[0])][GetBaseIndex(codon[1])][GetBaseIndex(codon[2])];
+}
+
+std::string GetMutType(const std::string& aa1, const std::string& aa2)
+{
+	if (aa1 == aa2) {
+		return "Synonymous";
+	} else if (aa1 == "*") {
+		return "Stop-codon-loss";
+	} else if (aa2 == "*") {
+		return "Stop-codon-gain";
+	} else {
+		return "Non-synonymous";
+	}
+}
+
 bool Convert(const std::string& chrom, const Transcript& trans, int pos, const std::string& ref, const std::string alt, const Fasta& fa)
 {
 #if 0
@@ -191,6 +261,11 @@ bool Convert(const std::string& chrom, const Transcript& trans, int pos, const s
 	std::string res = ".";
 	std::string type = ".";
 	std::string type2 = ".";
+	std::string codon1 = "";
+	std::string codon2 = "";
+	std::string mutAA = ".";
+	std::string mutAA3 = ".";
+	std::string mutType = ".";
 
 	const auto& exons = trans.exons_;
 	int cdsStart = trans.cdsStart_ - trans.txStart_;
@@ -243,9 +318,90 @@ bool Convert(const std::string& chrom, const Transcript& trans, int pos, const s
 					type = "Intron(" + std::to_string(i) + "/" + std::to_string(exons.size() - 1) + ")";
 					break;
 				} else if (pos < end) { // exon
-					res = "c." + std::to_string(GetTxPos(exons, pos) - cdsStartTxPos + 1);
+					int mutPos = GetTxPos(exons, pos) - cdsStartTxPos;
+					res = "c." + std::to_string(mutPos + 1);
 					type = "Exon(" + std::to_string(i + 1) + "/" + std::to_string(exons.size()) + ")";
 					type2 = "CDS";
+
+					if (mutPos % 3 == 0) {
+						std::string base1 = fa.GetSeq(chrom, trans.txStart_ + pos);
+
+						int pos2 = pos + 1;
+						int index = i;
+						if (pos2 >= exons[i].second) {
+							++index;
+							assert(static_cast<size_t>(index) < exons.size());
+							pos2 = exons[index].first;
+						}
+						std::string base2 = fa.GetSeq(chrom, trans.txStart_ + pos2);
+
+						int pos3 = pos2 + 1;
+						if (pos3 >= exons[index].second) {
+							++index;
+							assert(static_cast<size_t>(index) < exons.size());
+							pos3 = exons[index].first;
+						}
+						std::string base3 = fa.GetSeq(chrom, trans.txStart_ + pos3);
+
+						codon1 = base1 + base2 + base3;
+						codon2 = alt + base2 + base3;
+						std::string aa1 = BaseToAA(codon1);
+						std::string aa2 = BaseToAA(codon2);
+						mutAA = "p." + aa1 + std::to_string(mutPos / 3) + aa2;
+						mutAA3 = "p." + BaseToAA3(codon1) + std::to_string(mutPos / 3) + BaseToAA3(codon2);
+						mutType = GetMutType(aa1, aa2);
+					} else if (mutPos % 3 == 1) {
+						std::string base2 = fa.GetSeq(chrom, trans.txStart_ + pos);
+
+						int pos2 = pos - 1;
+						if (pos2 < exons[i].first) {
+							assert(i > 0);
+							pos2 = exons[i - 1].second - 1;
+						}
+						std::string base1 = fa.GetSeq(chrom, trans.txStart_ + pos2);
+
+						int pos3 = pos + 1;
+						if (pos3 >= exons[i].second) {
+							assert(i + 1 < exons.size());
+							pos3 = exons[i + 1].first;
+						}
+						std::string base3 = fa.GetSeq(chrom, trans.txStart_ + pos3);
+
+						codon1 = base1 + base2 + base3;
+						codon2 = base1 + alt + base3;
+						std::string aa1 = BaseToAA(codon1);
+						std::string aa2 = BaseToAA(codon2);
+						mutAA = "p." + aa1 + std::to_string(mutPos / 3) + aa2;
+						mutAA3 = "p." + BaseToAA3(codon1) + std::to_string(mutPos / 3) + BaseToAA3(codon2);
+						mutType = GetMutType(aa1, aa2);
+					} else {
+						std::string base3 = fa.GetSeq(chrom, trans.txStart_ + pos);
+
+						int pos2 = pos - 1;
+						int index = i;
+						if (pos2 < exons[index].first) {
+							--index;
+							assert(index >= 0);
+							pos2 = exons[index].second - 1;
+						}
+						std::string base2 = fa.GetSeq(chrom, trans.txStart_ + pos2);
+
+						int pos3 = pos2 - 1;
+						if (pos3 < exons[index].first) {
+							--index;
+							assert(index >= 0);
+							pos3 = exons[index].second - 1;
+						}
+						std::string base1 = fa.GetSeq(chrom, trans.txStart_ + pos3);
+
+						codon1 = base1 + base2 + base3;
+						codon2 = base1 + base2 + alt;
+						std::string aa1 = BaseToAA(codon1);
+						std::string aa2 = BaseToAA(codon2);
+						mutAA = "p." + aa1 + std::to_string(mutPos / 3) + aa2;
+						mutAA3 = "p." + BaseToAA3(codon1) + std::to_string(mutPos / 3) + BaseToAA3(codon2);
+						mutType = GetMutType(aa1, aa2);
+					}
 					break;
 				}
 			}
@@ -310,7 +466,8 @@ bool Convert(const std::string& chrom, const Transcript& trans, int pos, const s
 	//assert(ref == seq.substr(pos, 1));
 	res += fa.GetSeq(chrom, trans.txStart_ + pos, 1) + ">" + alt;
 
-	std::cout << chrom << "\t" << trans.txStart_ + pos + 1 << "\t" << trans.strand_ << "\t" << trans.name_ << "\t" << trans.name2_ << "\t" << res << "\t" << type << "\t" << type2 << std::endl;
+	std::cout << chrom << "\t" << trans.txStart_ + pos + 1 << "\t" << trans.strand_ << "\t" << trans.name_ << "\t" << trans.name2_
+		<< "\t" << res << "\t" << type << "\t" << type2 << "\t" << codon1 << "\t" << codon2 << "\t" << mutAA << "\t" << mutAA3 << "\t" << mutType << std::endl;
 	return true;
 }
 
@@ -350,7 +507,7 @@ bool Process(const std::string& filename,
 		return false;
 	}
 
-	std::cout << "chrom\tpos\tstrand\tname\tname2\tmutate\tsegment\ttype" << std::endl;
+	std::cout << "chrom\tpos\tstrand\tname\tname2\tmutate\tsegment\ttype\tcodon1\tcodon2\tmutAA\tmutAA3\tmutType" << std::endl;
 
 	size_t lineNo = 0;
 	std::string line;

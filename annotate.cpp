@@ -168,7 +168,7 @@ std::string CompBase(const std::string& base)
 	} else if (base == "G" || base == "g") {
 		return "C";
 	} else if (base == "T" || base == "t") {
-		return "t";
+		return "A";
 	} else {
 		return base;
 	}
@@ -434,7 +434,7 @@ bool Convert(const std::string& chrom, const Transcript& trans, int pos, const s
 						std::string base1 = CompBase(fa.GetSeq(chrom, trans.txStart_ + pos3));
 
 						codon1 = base1 + base2 + base3;
-						codon2 = base1 + base2 + alt;
+						codon2 = base1 + base2 + CompBase(alt);
 						std::string aa1 = BaseToAA(codon1);
 						std::string aa2 = BaseToAA(codon2);
 						mutAA = "p." + aa1 + std::to_string(mutPos / 3) + aa2;
@@ -459,7 +459,7 @@ bool Convert(const std::string& chrom, const Transcript& trans, int pos, const s
 						std::string base1 = CompBase(fa.GetSeq(chrom, trans.txStart_ + pos3));
 
 						codon1 = base1 + base2 + base3;
-						codon2 = base1 + alt + base3;
+						codon2 = base1 + CompBase(alt) + base3;
 						std::string aa1 = BaseToAA(codon1);
 						std::string aa2 = BaseToAA(codon2);
 						mutAA = "p." + aa1 + std::to_string(mutPos / 3) + aa2;
@@ -486,7 +486,7 @@ bool Convert(const std::string& chrom, const Transcript& trans, int pos, const s
 						std::string base3 = CompBase(fa.GetSeq(chrom, trans.txStart_ + pos3));
 
 						codon1 = base1 + base2 + base3;
-						codon2 = alt + base2 + base3;
+						codon2 = CompBase(alt) + base2 + base3;
 						std::string aa1 = BaseToAA(codon1);
 						std::string aa2 = BaseToAA(codon2);
 						mutAA = "p." + aa1 + std::to_string(mutPos / 3) + aa2;

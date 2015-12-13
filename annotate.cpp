@@ -220,6 +220,21 @@ int GetBaseIndex(char c)
 	throw std::runtime_error("Invalid base '" + std::string(1, c) + "'");
 }
 
+std::string CompBase(const std::string& base)
+{
+	if (base == "A" || base == "a") {
+		return "T";
+	} else if (base == "C" || base == "c") {
+		return "G";
+	} else if (base == "G" || base == "g") {
+		return "C";
+	} else if (base == "T" || base == "t") {
+		return "t";
+	} else {
+		return base;
+	}
+}
+
 std::string BaseToAA(const std::string& codon)
 {
 	return CODON_TABLE[GetBaseIndex(codon[0])][GetBaseIndex(codon[1])][GetBaseIndex(codon[2])];
@@ -454,9 +469,90 @@ bool Convert(const std::string& chrom, const Transcript& trans, int pos, const s
 					type = "Intron(" + std::to_string(exons.size() - i) + "/" + std::to_string(exons.size() - 1) + ")";
 					break;
 				} else if (pos >= start) { // exon
-					res = "c." + std::to_string(GetTxPosRev(exons, pos - 1) - cdsEndTxPos + 1);
+					int mutPos = GetTxPosRev(exons, pos - 1) - cdsEndTxPos;
+					res = "c." + std::to_string(mutPos + 1);
 					type = "Exon(" + std::to_string(exons.size() - i + 1) + "/" + std::to_string(exons.size()) + ")";
 					type2 = "CDS";
+
+					if (mutPos % 3 == 2) {
+						std::string base3 = CompBase(fa.GetSeq(chrom, trans.txStart_ + pos));
+
+						int pos2 = pos + 1;
+						int index = i;
+						if (pos2 >= exons[i].second) {
+							++index;
+							assert(static_cast<size_t>(index) < exons.size());
+							pos2 = exons[index].first;
+						}
+						std::string base2 = CompBase(fa.GetSeq(chrom, trans.txStart_ + pos2));
+
+						int pos3 = pos2 + 1;
+						if (pos3 >= exons[index].second) {
+							++index;
+							assert(static_cast<size_t>(index) < exons.size());
+							pos3 = exons[index].first;
+						}
+						std::string base1 = CompBase(fa.GetSeq(chrom, trans.txStart_ + pos3));
+
+						codon1 = base1 + base2 + base3;
+						codon2 = base1 + base2 + alt;
+						std::string aa1 = BaseToAA(codon1);
+						std::string aa2 = BaseToAA(codon2);
+						mutAA = "p." + aa1 + std::to_string(mutPos / 3) + aa2;
+						mutAA3 = "p." + BaseToAA3(codon1) + std::to_string(mutPos / 3) + BaseToAA3(codon2);
+						mutType = GetMutType(aa1, aa2);
+					} else if (mutPos % 3 == 1) {
+						std::string base2 = CompBase(fa.GetSeq(chrom, trans.txStart_ + pos));
+
+						int pos2 = pos - 1;
+						if (pos2 < exons[i].first) {
+							assert(i > 0);
+							pos2 = exons[i - 1].second - 1;
+						}
+						std::string base3 = CompBase(fa.GetSeq(chrom, trans.txStart_ + pos2));
+
+						int pos3 = pos + 1;
+						if (pos3 >= exons[i].second) {
+							assert(i + 1 < exons.size());
+							pos3 = exons[i + 1].first;
+						}
+						std::string base1 = CompBase(fa.GetSeq(chrom, trans.txStart_ + pos3));
+
+						codon1 = base1 + base2 + base3;
+						codon2 = base1 + alt + base3;
+						std::string aa1 = BaseToAA(codon1);
+						std::string aa2 = BaseToAA(codon2);
+						mutAA = "p." + aa1 + std::to_string(mutPos / 3) + aa2;
+						mutAA3 = "p." + BaseToAA3(codon1) + std::to_string(mutPos / 3) + BaseToAA3(codon2);
+						mutType = GetMutType(aa1, aa2);
+					} else {
+						std::string base1 = CompBase(fa.GetSeq(chrom, trans.txStart_ + pos));
+
+						int pos2 = pos - 1;
+						int index = i;
+						if (pos2 < exons[index].first) {
+							--index;
+							assert(index >= 0);
+							pos2 = exons[index].second - 1;
+						}
+						std::string base2 = CompBase(fa.GetSeq(chrom, trans.txStart_ + pos2));
+
+						int pos3 = pos2 - 1;
+						if (pos3 < exons[index].first) {
+							--index;
+							assert(index >= 0);
+							pos3 = exons[index].second - 1;
+						}
+						std::string base3 = CompBase(fa.GetSeq(chrom, trans.txStart_ + pos3));
+
+						codon1 = base1 + base2 + base3;
+						codon2 = alt + base2 + base3;
+						std::string aa1 = BaseToAA(codon1);
+						std::string aa2 = BaseToAA(codon2);
+						mutAA = "p." + aa1 + std::to_string(mutPos / 3) + aa2;
+						mutAA3 = "p." + BaseToAA3(codon1) + std::to_string(mutPos / 3) + BaseToAA3(codon2);
+						mutType = GetMutType(aa1, aa2);
+					}
 					break;
 				}
 			}

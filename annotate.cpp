@@ -146,7 +146,7 @@ const char* CODON_TABLE_3[4][4][4] = {
 	},
 	{
 		{ "Val", "Val", "Val", "Val" }, { "Ala", "Ala", "Ala", "Ala" },
-		{ "Asp", "Asp", "Asp", "Asp" }, { "Gly", "Gly", "Gly", "Gly" },
+		{ "Asp", "Asp", "Glu", "Glu" }, { "Gly", "Gly", "Gly", "Gly" },
 	},
 };
 

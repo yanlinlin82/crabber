@@ -534,7 +534,7 @@ bool ProcessItem(const std::string& chrom, int pos, const std::string& alleleRef
 	return true;
 }
 
-bool Process(const std::string& filename,
+static bool Process(const std::string& filename,
 		const std::map<std::string, std::vector<Transcript>>& data, const Fasta& fa)
 {
 	std::ifstream file(filename, std::ios::in);
@@ -584,7 +584,7 @@ static void PrintUsage()
 		<< std::endl;
 }
 
-int main_annotate(int argc, char* const argv[])
+int Annotate_main(int argc, char* const argv[])
 {
 	std::vector<std::string> args(argv, argv + argc);
 	if (args.size() < 4) {

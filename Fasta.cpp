@@ -45,6 +45,15 @@ bool Fasta::Has(const std::string& chrom) const
 	return (seq_.find(chrom) != seq_.end());
 }
 
+size_t Fasta::GetLength(const std::string& chrom) const
+{
+	auto it = seq_.find(chrom);
+	if (it == seq_.end()) {
+		return 0;
+	}
+	return it->second.size();
+}
+
 std::string Fasta::GetSeq(const std::string& chrom, size_t pos, size_t size) const
 {
 	std::string res;

@@ -10,6 +10,7 @@ public:
 	bool Load(const std::string& filename, bool verbose = false);
 
 	bool Has(const std::string& chrom) const;
+	size_t GetLength(const std::string& chrom) const;
 
 	std::string GetSeq(const std::string& chrom, size_t pos, size_t size = 1) const;
 private:

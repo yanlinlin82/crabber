@@ -1,6 +1,6 @@
 #include <iostream>
 #include <string>
-#include "annotate.h"
+#include "Annotate.h"
 #include "version.h"
 
 static void PrintUsage(const char* progname)

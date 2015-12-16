@@ -4,7 +4,7 @@
 #include <string>
 #include <map>
 #include <cassert>
-#include "annotate.h"
+#include "Annotate.h"
 #include "String.h"
 #include "Fasta.h"
 #include "LineSplit.h"

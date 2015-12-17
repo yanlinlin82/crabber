@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include "DepthStat.h"
 #include "Annotate.h"
 #include "RegionGet.h"
 #include "RegionCount.h"
@@ -14,6 +15,7 @@ static void PrintUsage(const char* progname)
 		"Usage: " << progname << " <command> [options]\n"
 		"\n"
 		"Commands:\n"
+		"    depth-stat     stat coverage depth\n"
 		"    region-get     extract sequences in regions\n"
 		"    region-count   count bases in regions\n"
 		"    annotate       annotate genetic mutations\n"
@@ -28,7 +30,9 @@ int main(int argc, char* const argv[])
 	}
 
 	std::string cmd(argv[1]);
-	if (cmd == "region-get") {
+	if (cmd == "depth-stat") {
+		return DepthStat_main(argc - 1, argv + 1);
+	} else if (cmd == "region-get") {
 		return RegionGet_main(argc - 1, argv + 1);
 	} else if (cmd == "region-count") {
 		return RegionCount_main(argc - 1, argv + 1);

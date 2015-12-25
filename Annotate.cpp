@@ -197,7 +197,7 @@ std::string GetMutType(const std::string& aa1, const std::string& aa2)
 	}
 }
 
-bool Convert(const std::string& chrom, const Transcript& trans, int pos, const std::string& ref, const std::string alt, const Fasta& fa)
+bool Convert(const std::string& chrom, const Transcript& trans, int pos, const std::string& ref, const std::string alt, const Fasta& fa, const std::string& text)
 {
 #if 0
 	static bool firstTime = true;
@@ -215,8 +215,8 @@ bool Convert(const std::string& chrom, const Transcript& trans, int pos, const s
 	std::string res = ".";
 	std::string type = ".";
 	std::string type2 = ".";
-	std::string codon1 = "";
-	std::string codon2 = "";
+	std::string codon1 = ".";
+	std::string codon2 = ".";
 	std::string mutAA = ".";
 	std::string mutAA3 = ".";
 	std::string mutType = ".";
@@ -277,7 +277,11 @@ bool Convert(const std::string& chrom, const Transcript& trans, int pos, const s
 					type = "Exon(" + std::to_string(i + 1) + "/" + std::to_string(exons.size()) + ")";
 					type2 = "CDS";
 
-					if (mutPos % 3 == 0) {
+					if (alt == "*") {
+						mutType = "Frameshift";
+					} else if (alt.size() > 1) {
+						mutType = ((alt.size() - 2) % 3 == 0) ? "Inframe" : "Frameshift";
+					} else if (mutPos % 3 == 0) {
 						std::string base1 = fa.GetSeq(chrom, trans.txStart_ + pos);
 
 						int pos2 = pos + 1;
@@ -413,7 +417,11 @@ bool Convert(const std::string& chrom, const Transcript& trans, int pos, const s
 					type = "Exon(" + std::to_string(exons.size() - i + 1) + "/" + std::to_string(exons.size()) + ")";
 					type2 = "CDS";
 
-					if (mutPos % 3 == 2) {
+					if (alt == "*") {
+						mutType = "Frameshift";
+					} else if (alt.size() > 1) {
+						mutType = ((alt.size() - 2) % 3 == 0) ? "Inframe" : "Frameshift";
+					} else if (mutPos % 3 == 2) {
 						std::string base3 = CompBase(fa.GetSeq(chrom, trans.txStart_ + pos));
 
 						int pos2 = pos + 1;
@@ -503,12 +511,13 @@ bool Convert(const std::string& chrom, const Transcript& trans, int pos, const s
 	res += fa.GetSeq(chrom, trans.txStart_ + pos, 1) + ">" + alt;
 
 	std::cout << chrom << "\t" << trans.txStart_ + pos + 1 << "\t" << trans.strand_ << "\t" << trans.name_ << "\t" << trans.name2_
-		<< "\t" << res << "\t" << type << "\t" << type2 << "\t" << codon1 << "\t" << codon2 << "\t" << mutAA << "\t" << mutAA3 << "\t" << mutType << std::endl;
+		<< "\t" << res << "\t" << type << "\t" << type2 << "\t" << codon1 << "\t" << codon2 << "\t" << mutAA << "\t" << mutAA3 << "\t" << mutType
+		<< "\t" << text << std::endl;
 	return true;
 }
 
 bool ProcessItem(const std::string& chrom, int pos, const std::string& alleleRef, const std::string& alleleAlt,
-		const std::map<std::string, std::vector<Transcript>>& data, const Fasta& fa)
+		const std::map<std::string, std::vector<Transcript>>& data, const Fasta& fa, const std::string& text, bool outputFirstOnly)
 {
 	auto it = data.find(chrom);
 	if (it != data.end()) {
@@ -523,19 +532,22 @@ bool ProcessItem(const std::string& chrom, int pos, const std::string& alleleRef
 					return false;
 				}
 
-				Convert(chrom, trans[i], pos - trans[i].txStart_, alleleRef, alleleAlt, fa);
+				Convert(chrom, trans[i], pos - trans[i].txStart_, alleleRef, alleleAlt, fa, text);
 				found = true;
+				if (outputFirstOnly) {
+					break;
+				}
 			}
 		}
 		if (!found) {
-			std::cout << chrom << "\t" << pos + 1 << "\t.\t.\t.\t.\tIntergenic\t." << std::endl;
+			std::cout << chrom << "\t" << pos + 1 << "\t.\t.\t.\t.\tIntergenic\t.\t.\t.\t.\t.\t.\t" << text << std::endl;
 		}
 	}
 	return true;
 }
 
 static bool Process(const std::string& filename,
-		const std::map<std::string, std::vector<Transcript>>& data, const Fasta& fa)
+		const std::map<std::string, std::vector<Transcript>>& data, const Fasta& fa, bool outputFirstOnly)
 {
 	std::ifstream file(filename, std::ios::in);
 	if (!file.is_open()) {
@@ -560,7 +572,7 @@ static bool Process(const std::string& filename,
 			std::string alleleRef = sp.GetField(3);
 			std::string alleleAlt = sp.GetField(4);
 
-			ProcessItem(chrom, genomePos - 1, alleleRef, alleleAlt, data, fa);
+			ProcessItem(chrom, genomePos - 1, alleleRef, alleleAlt, data, fa, line, outputFirstOnly);
 		} catch (const std::exception& e) {
 			std::cerr << "Unexpected error in line " << lineNo << " of file '" << filename << "'! " << e.what() << std::endl;
 			file.close();
@@ -575,34 +587,53 @@ static bool Process(const std::string& filename,
 static void PrintUsage()
 {
 	std::cout << "\n"
-		"Usage:  crabber annotate <x.vcf> <refGene.tsv> <ref.fa>\n"
+		"Usage:  crabber annotate [options] <x.vcf> <refGene.tsv> <ref.fa>\n"
 		"\n"
 		"Input:\n"
 		"   <x.vcf>         input SNV list in VCF format\n"
 		"   <refGene.tsv>   track data downloaded from UCSC table browser\n"
 		"   <ref.fa>        reference genome in FASTA format\n"
+		"\n"
+		"Options:\n"
+		"   -1              output only first matched script, default to output all\n"
 		<< std::endl;
 }
 
 int Annotate_main(int argc, char* const argv[])
 {
+	bool outputFirstOnly = false;
+	std::string vcfFile;
+	std::string refGeneFile;
+	std::string refFastaFile;
+
 	std::vector<std::string> args(argv, argv + argc);
-	if (args.size() < 4) {
+	std::vector<std::string> restArgs;
+	for (size_t i = 1; i < args.size(); ++i) {
+		if (args[i] == "-1") {
+			outputFirstOnly = true;
+		} else {
+			restArgs.push_back(args[i]);
+		}
+	}
+	if (restArgs.size() < 3) {
 		PrintUsage();
 		return 1;
 	}
+	vcfFile = restArgs[0];
+	refGeneFile = restArgs[1];
+	refFastaFile = restArgs[2];
 
 	Fasta fa;
-	if (!fa.Load(args[3])) {
+	if (!fa.Load(refFastaFile)) {
 		return 1;
 	}
 
 	std::map<std::string, std::vector<Transcript>> data;
-	if (!LoadRefGene(args[2], data)) {
+	if (!LoadRefGene(refGeneFile, data)) {
 		return 1;
 	}
 
-	if (!Process(args[1], data, fa)) {
+	if (!Process(vcfFile, data, fa, outputFirstOnly)) {
 		return 1;
 	}
 	return 0;

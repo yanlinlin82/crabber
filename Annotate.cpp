@@ -95,23 +95,6 @@ int GetTxPos(const std::vector<std::pair<int, int>>& exons, int pos)
 	throw std::runtime_error("GetTxPos - bad pos (" + std::to_string(pos) + " >= " + std::to_string(exons.back().second) + ")");
 }
 
-int GetTxPosRev(const std::vector<std::pair<int, int>>& exons, int pos)
-{
-	int count = 0;
-	for (size_t i = exons.size(); i > 0; --i) {
-		int start = exons[i - 1].first;
-		int end = exons[i - 1].second;
-		if (pos >= end) {
-			throw std::runtime_error("GetTxPosRev - bad pos (" + std::to_string(pos) + " >= " + std::to_string(end) + ")");
-		}
-		if (pos >= start) {
-			return count + (end - pos);
-		}
-		count += end - start;
-	}
-	throw std::runtime_error("GetTxPosRev - bad pos (" + std::to_string(pos) + " < " + std::to_string(exons.front().first) + ")");
-}
-
 const char* CODON_TABLE[4][4][4] = {
 	{
 		{ "F", "F", "L", "L" }, { "S", "S", "S", "S" },
@@ -199,19 +182,6 @@ std::string GetMutType(const std::string& aa1, const std::string& aa2)
 
 bool Convert(const std::string& chrom, const Transcript& trans, int pos, const std::string& ref, const std::string alt, const Fasta& fa, const std::string& text)
 {
-#if 0
-	static bool firstTime = true;
-	if (firstTime) {
-		//firstTime = false;
-		std::cout << "Convert: " << trans.name2_ << '\t' << pos << '\t' << trans.strand_ << '\t' << seq.size() << std::endl;
-		std::cout << "   cds: " << trans.cdsStart_ << ", " << trans.cdsEnd_ << std::endl;
-		std::cout << "   cds: " << trans.cdsStart_ - trans.txStart_ << ", " << trans.cdsEnd_ - trans.txStart_ << std::endl;
-		for (size_t i = 0; i < trans.exons_.size(); ++i) {
-			std::cout << "   (" << trans.exons_[i].first + trans.txStart_ << '\t' << trans.exons_[i].second + trans.txStart_ << ")  "
-				<< trans.exons_[i].first << '\t' << trans.exons_[i].second << std::endl;
-		}
-	}
-#endif
 	std::string res = ".";
 	std::string type = ".";
 	std::string type2 = ".";
@@ -225,7 +195,9 @@ bool Convert(const std::string& chrom, const Transcript& trans, int pos, const s
 	int cdsStart = trans.cdsStart_ - trans.txStart_;
 	int cdsEnd = trans.cdsEnd_ - trans.txStart_;
 
-	if (trans.strand_ == "+") {
+	if (cdsStart == cdsEnd) {
+		mutType = "Unknown";
+	} else if (trans.strand_ == "+") {
 		int cdsStartTxPos = GetTxPos(exons, cdsStart);
 		int cdsEndTxPos = GetTxPos(exons, cdsEnd - 1) + 1;
 
@@ -279,6 +251,8 @@ bool Convert(const std::string& chrom, const Transcript& trans, int pos, const s
 
 					if (alt == "*") {
 						mutType = "Frameshift";
+					} else if (alt == ".") {
+						mutType = "Unknown";
 					} else if (alt.size() > 1) {
 						mutType = ((alt.size() - 2) % 3 == 0) ? "Inframe" : "Frameshift";
 					} else if (mutPos % 3 == 0) {
@@ -366,8 +340,8 @@ bool Convert(const std::string& chrom, const Transcript& trans, int pos, const s
 		}
 	} else {
 		assert(trans.strand_ == "-");
-		int cdsStartTxPos = GetTxPosRev(exons, cdsStart);
-		int cdsEndTxPos = GetTxPosRev(exons, cdsEnd - 1) + 1;
+		int cdsStartTxPos = GetTxPos(exons, cdsStart);
+		int cdsEndTxPos = GetTxPos(exons, cdsEnd - 1) + 1;
 
 		for (size_t i = exons.size(); i > 0; --i) {
 			int start = exons[i - 1].first;
@@ -375,14 +349,14 @@ bool Convert(const std::string& chrom, const Transcript& trans, int pos, const s
 			if (pos >= cdsEnd) { // 5'-UTR
 				if (pos >= end) { // intron
 					if (i == exons.size() || (pos - end) < (exons[i].first - pos)) {
-						res = "c.-" + std::to_string(cdsEndTxPos - GetTxPosRev(exons, end - 1)) + "-" + std::to_string(pos - end);
+						res = "c.-" + std::to_string(GetTxPos(exons, end - 1) - cdsEndTxPos + 1) + "-" + std::to_string(pos - end + 1);
 					} else {
-						res = "c.-" + std::to_string(cdsEndTxPos - GetTxPosRev(exons, exons[i].first)) + "+" + std::to_string(exons[i].first - pos);
+						res = "c.-" + std::to_string(GetTxPos(exons, exons[i].first) - cdsEndTxPos + 1) + "+" + std::to_string(exons[i].first - pos);
 					}
 					type = "Intron(" + std::to_string(exons.size() - i) + "/" + std::to_string(exons.size() - 1) + ")";
 					break;
 				} else if (pos >= start) { // exon
-					res = "c.-" + std::to_string(cdsEndTxPos - GetTxPosRev(exons, pos) + 1);
+					res = "c.-" + std::to_string(GetTxPos(exons, pos) - cdsEndTxPos + 1);
 					type = "Exon(" + std::to_string(exons.size() - i + 1) + "/" + std::to_string(exons.size()) + ")";
 					type2 = "5'-UTR";
 					break;
@@ -390,14 +364,14 @@ bool Convert(const std::string& chrom, const Transcript& trans, int pos, const s
 			} else if (pos < cdsStart) { // 3'-UTR
 				if (pos >= end) { // intron
 					if (i == exons.size() || (pos - end) < (exons[i].first - pos)) {
-						res = "c.*" + std::to_string(cdsStartTxPos - GetTxPosRev(exons, end - 1)) + "-" + std::to_string(pos - end);
+						res = "c.*" + std::to_string(cdsStartTxPos - GetTxPos(exons, end - 1)) + "-" + std::to_string(pos - end + 1);
 					} else {
-						res = "c.*" + std::to_string(cdsStartTxPos - GetTxPosRev(exons, exons[i].first)) + "+" + std::to_string(exons[i].first - pos);
+						res = "c.*" + std::to_string(cdsStartTxPos - GetTxPos(exons, exons[i].first)) + "+" + std::to_string(exons[i].first - pos);
 					}
 					type = "Intron(" + std::to_string(exons.size() - i) + "/" + std::to_string(exons.size() - 1) + ")";
 					break;
 				} else if (pos >= start) { // exon
-					res = "c.*" + std::to_string(cdsStartTxPos - GetTxPosRev(exons, pos) + 1);
+					res = "c.*" + std::to_string(cdsStartTxPos - GetTxPos(exons, pos));
 					type = "Exon(" + std::to_string(exons.size() - i + 1) + "/" + std::to_string(exons.size()) + ")";
 					type2 = "3'-UTR";
 					break;
@@ -405,20 +379,22 @@ bool Convert(const std::string& chrom, const Transcript& trans, int pos, const s
 			} else { // CDS
 				if (pos >= end) { // intron
 					if (i == exons.size() || (pos - end) < (exons[i].first - pos)) {
-						res = "c." + std::to_string(GetTxPosRev(exons, end - 1) - cdsEndTxPos) + "-" + std::to_string(pos - end + 1);
+						res = "c." + std::to_string(cdsEndTxPos - GetTxPos(exons, end - 1)) + "-" + std::to_string(pos - end + 1);
 					} else {
-						res = "c." + std::to_string(GetTxPosRev(exons, exons[i].first) - cdsEndTxPos) + "+" + std::to_string(exons[i].first - pos);
+						res = "c." + std::to_string(cdsEndTxPos - GetTxPos(exons, exons[i].first)) + "+" + std::to_string(exons[i].first - pos);
 					}
 					type = "Intron(" + std::to_string(exons.size() - i) + "/" + std::to_string(exons.size() - 1) + ")";
 					break;
 				} else if (pos >= start) { // exon
-					int mutPos = GetTxPosRev(exons, pos - 1) - cdsEndTxPos;
+					int mutPos = cdsEndTxPos - GetTxPos(exons, pos) - 1;
 					res = "c." + std::to_string(mutPos + 1);
 					type = "Exon(" + std::to_string(exons.size() - i + 1) + "/" + std::to_string(exons.size()) + ")";
 					type2 = "CDS";
 
 					if (alt == "*") {
 						mutType = "Frameshift";
+					} else if (alt == ".") {
+						mutType = "Unknown";
 					} else if (alt.size() > 1) {
 						mutType = ((alt.size() - 2) % 3 == 0) ? "Inframe" : "Frameshift";
 					} else if (mutPos % 3 == 2) {

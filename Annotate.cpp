@@ -12,7 +12,7 @@
 
 bool LoadRefGene(const std::string& filename, std::map<std::string, std::vector<Transcript>>& data)
 {
-	std::fstream file(filename.c_str(), std::ios::in);
+	std::ifstream file(filename, std::ios::in);
 	if (!file.is_open()) {
 		std::cerr << "Can not open file '" << filename << "'!" << std::endl;
 		return false;

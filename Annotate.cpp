@@ -10,6 +10,26 @@
 #include "LineSplit.h"
 #include "Transcript.h"
 
+static std::vector<std::string> Split(const std::string& s, const std::string& sep = "\t ", size_t count = 0)
+{
+	std::vector<std::string> a;
+	size_t lastPos = s.find_first_not_of(sep);
+	while (lastPos != std::string::npos && (count == 0 || a.size() < count)) {
+		if (a.size() + 1 == count) {
+			a.push_back(s.substr(lastPos));
+		} else {
+			size_t pos = s.find_first_of(sep, lastPos);
+			if (pos == std::string::npos) {
+				a.push_back(s.substr(lastPos));
+			} else {
+				a.push_back(s.substr(lastPos, pos - lastPos));
+			}
+			lastPos = s.find_first_not_of(sep, pos);
+		}
+	}
+	return a;
+}
+
 bool LoadRefGene(const std::string& filename, std::map<std::string, std::vector<Transcript>>& data)
 {
 	std::ifstream file(filename, std::ios::in);
@@ -180,7 +200,8 @@ std::string GetMutType(const std::string& aa1, const std::string& aa2)
 	}
 }
 
-bool Convert(const std::string& chrom, const Transcript& trans, int pos, const std::string& ref, const std::string alt, const Fasta& fa, const std::string& text)
+bool Convert(const std::string& chrom, const Transcript& trans, int pos, const std::string& ref, const std::string alt,
+		const Fasta& fa, const std::vector<std::string>& fields)
 {
 	std::string res = ".";
 	std::string type = ".";
@@ -486,14 +507,18 @@ bool Convert(const std::string& chrom, const Transcript& trans, int pos, const s
 	//assert(ref == seq.substr(pos, 1));
 	res += fa.GetSeq(chrom, trans.txStart_ + pos, 1) + ">" + alt;
 
-	std::cout << chrom << "\t" << trans.txStart_ + pos + 1 << "\t" << trans.strand_ << "\t" << trans.name_ << "\t" << trans.name2_
+	for (size_t i = 0; i + 1 < fields.size(); ++i) {
+		std::cout << fields[i] << "\t";
+	}
+	std::cout << trans.strand_ << "\t" << trans.name_ << "\t" << trans.name2_
 		<< "\t" << res << "\t" << type << "\t" << type2 << "\t" << codon1 << "\t" << codon2 << "\t" << mutAA << "\t" << mutAA3 << "\t" << mutType
-		<< "\t" << text << std::endl;
+		<< "\t" << fields.back() << std::endl;
 	return true;
 }
 
 bool ProcessItem(const std::string& chrom, int pos, const std::string& alleleRef, const std::string& alleleAlt,
-		const std::map<std::string, std::vector<Transcript>>& data, const Fasta& fa, const std::string& text, bool outputFirstOnly)
+		const std::map<std::string, std::vector<Transcript>>& data, const Fasta& fa,
+		const std::vector<std::string>& fields, bool outputFirstOnly)
 {
 	auto it = data.find(chrom);
 	if (it != data.end()) {
@@ -501,14 +526,12 @@ bool ProcessItem(const std::string& chrom, int pos, const std::string& alleleRef
 		bool found = false;
 		for (size_t i = 0; i < trans.size(); ++i) {
 			if (pos >= trans[i].txStart_ && pos < trans[i].txEnd_) {
-				//std::cerr << "Found in " << trans[i].name_ << " (" << chrom << ':' << trans[i].txStart_ << "-" << trans[i].txEnd_ << ")" << std::endl;
-
 				if (!fa.Has(chrom)) {
 					std::cerr << "Can not found sequence '" << chrom << "' in ref fasta" << std::endl;
 					return false;
 				}
 
-				Convert(chrom, trans[i], pos - trans[i].txStart_, alleleRef, alleleAlt, fa, text);
+				Convert(chrom, trans[i], pos - trans[i].txStart_, alleleRef, alleleAlt, fa, fields);
 				found = true;
 				if (outputFirstOnly) {
 					break;
@@ -516,13 +539,28 @@ bool ProcessItem(const std::string& chrom, int pos, const std::string& alleleRef
 			}
 		}
 		if (!found) {
-			std::cout << chrom << "\t" << pos + 1 << "\t.\t.\t.\t.\tIntergenic\t.\t.\t.\t.\t.\t.\t" << text << std::endl;
+			for (size_t i = 0; i + 1 < fields.size(); ++i) {
+				std::cout << fields[i] << "\t";
+			}
+			std::cout << ".\t.\t.\t.\tIntergenic\t.\t.\t.\t.\t.\t.\t" << fields.back() << std::endl;
 		}
 	}
 	return true;
 }
 
-static bool Process(const std::string& filename, bool tsvFile,
+static void OutputHeader(const std::vector<std::string>& fields, size_t insertPos)
+{
+	for (size_t i = 0; i < insertPos && i < fields.size(); ++i) {
+		std::cout << fields[i] << '\t';
+	}
+	std::cout << "strand\tname\tname2\tmutate\tsegment\ttype\tcodon1\tcodon2\tmutAA\tmutAA3\tmutType";
+	for (size_t i = insertPos; i < fields.size(); ++i) {
+		std::cout << '\t' << fields[i];
+	}
+	std::cout << std::endl;
+}
+
+static bool Process(const std::string& filename, bool tsvFile, bool hasHeader,
 		const std::map<std::string, std::vector<Transcript>>& data, const Fasta& fa, bool outputFirstOnly)
 {
 	std::ifstream file(filename, std::ios::in);
@@ -531,24 +569,39 @@ static bool Process(const std::string& filename, bool tsvFile,
 		return false;
 	}
 
-	std::cout << "chrom\tpos\tstrand\tname\tname2\tmutate\tsegment\ttype\tcodon1\tcodon2\tmutAA\tmutAA3\tmutType" << std::endl;
-
+	std::vector<std::string> fields;
 	size_t lineNo = 0;
 	std::string line;
 	while (std::getline(file, line)) {
 		++lineNo;
-		if (line.empty() || line[0] == '#') continue;
-
-		LineSplit sp;
-		sp.Split(line, '\t');
+		if (tsvFile) {
+			if (line.empty() || line[0] == '#') continue;
+			if (lineNo == 1 && hasHeader) {
+				fields = Split(line, "\t");
+				OutputHeader(fields, 5);
+				continue;
+			}
+		} else {
+			if (line.empty()) continue;
+			if (line[0] == '#') {
+				if (line[1] == '#') continue;
+				if (hasHeader) {
+					fields = Split(line.substr(1), "\t");
+					OutputHeader(fields, 5);
+				}
+				continue;
+			}
+		}
 
 		try {
-			std::string chrom = sp.GetField(0);
-			int genomePos = stoi(sp.GetField(1));
-			std::string alleleRef = sp.GetField(tsvFile ? 2 : 3);
-			std::string alleleAlt = sp.GetField(tsvFile ? 3 : 4);
+			fields = Split(line, "\t", 6);
 
-			ProcessItem(chrom, genomePos - 1, alleleRef, alleleAlt, data, fa, line, outputFirstOnly);
+			std::string chrom = fields[0];
+			int genomePos = std::stoi(fields[1]);
+			std::string alleleRef = fields[3];
+			std::string alleleAlt = fields[4];
+
+			ProcessItem(chrom, genomePos - 1, alleleRef, alleleAlt, data, fa, fields, outputFirstOnly);
 		} catch (const std::exception& e) {
 			std::cerr << "Unexpected error in line " << lineNo << " of file '" << filename << "'! " << e.what() << std::endl;
 			file.close();
@@ -573,6 +626,7 @@ static void PrintUsage()
 		"Options:\n"
 		"   -1              output only first matched script, default to output all\n"
 		"   -T              TSV input, with columns: chrom, start, end, ref, alt...\n"
+		"   -H              input file has header, output with header\n"
 		<< std::endl;
 }
 
@@ -583,6 +637,7 @@ int Annotate_main(int argc, char* const argv[])
 	std::string refGeneFile;
 	std::string refFastaFile;
 	bool tsvInput = false;
+	bool hasHeader = false;
 
 	std::vector<std::string> args(argv, argv + argc);
 	std::vector<std::string> restArgs;
@@ -591,6 +646,8 @@ int Annotate_main(int argc, char* const argv[])
 			outputFirstOnly = true;
 		} else if (args[i] == "-T") {
 			tsvInput = true;
+		} else if (args[i] == "-H") {
+			hasHeader = true;
 		} else {
 			restArgs.push_back(args[i]);
 		}
@@ -613,7 +670,7 @@ int Annotate_main(int argc, char* const argv[])
 		return 1;
 	}
 
-	if (!Process(inputFile, tsvInput, data, fa, outputFirstOnly)) {
+	if (!Process(inputFile, tsvInput, hasHeader, data, fa, outputFirstOnly)) {
 		return 1;
 	}
 	return 0;

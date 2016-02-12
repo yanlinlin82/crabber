@@ -522,7 +522,7 @@ bool ProcessItem(const std::string& chrom, int pos, const std::string& alleleRef
 	return true;
 }
 
-static bool Process(const std::string& filename,
+static bool Process(const std::string& filename, bool tsvFile,
 		const std::map<std::string, std::vector<Transcript>>& data, const Fasta& fa, bool outputFirstOnly)
 {
 	std::ifstream file(filename, std::ios::in);
@@ -545,8 +545,8 @@ static bool Process(const std::string& filename,
 		try {
 			std::string chrom = sp.GetField(0);
 			int genomePos = stoi(sp.GetField(1));
-			std::string alleleRef = sp.GetField(3);
-			std::string alleleAlt = sp.GetField(4);
+			std::string alleleRef = sp.GetField(tsvFile ? 2 : 3);
+			std::string alleleAlt = sp.GetField(tsvFile ? 3 : 4);
 
 			ProcessItem(chrom, genomePos - 1, alleleRef, alleleAlt, data, fa, line, outputFirstOnly);
 		} catch (const std::exception& e) {
@@ -572,21 +572,25 @@ static void PrintUsage()
 		"\n"
 		"Options:\n"
 		"   -1              output only first matched script, default to output all\n"
+		"   -T              TSV input, with columns: chrom, start, end, ref, alt...\n"
 		<< std::endl;
 }
 
 int Annotate_main(int argc, char* const argv[])
 {
 	bool outputFirstOnly = false;
-	std::string vcfFile;
+	std::string inputFile;
 	std::string refGeneFile;
 	std::string refFastaFile;
+	bool tsvInput = false;
 
 	std::vector<std::string> args(argv, argv + argc);
 	std::vector<std::string> restArgs;
 	for (size_t i = 1; i < args.size(); ++i) {
 		if (args[i] == "-1") {
 			outputFirstOnly = true;
+		} else if (args[i] == "-T") {
+			tsvInput = true;
 		} else {
 			restArgs.push_back(args[i]);
 		}
@@ -595,7 +599,7 @@ int Annotate_main(int argc, char* const argv[])
 		PrintUsage();
 		return 1;
 	}
-	vcfFile = restArgs[0];
+	inputFile = restArgs[0];
 	refGeneFile = restArgs[1];
 	refFastaFile = restArgs[2];
 
@@ -609,7 +613,7 @@ int Annotate_main(int argc, char* const argv[])
 		return 1;
 	}
 
-	if (!Process(vcfFile, data, fa, outputFirstOnly)) {
+	if (!Process(inputFile, tsvInput, data, fa, outputFirstOnly)) {
 		return 1;
 	}
 	return 0;

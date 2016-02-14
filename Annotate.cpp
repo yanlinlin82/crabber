@@ -300,8 +300,8 @@ bool Convert(const std::string& chrom, const Transcript& trans, int pos, const s
 						codon2 = alt + base2 + base3;
 						std::string aa1 = BaseToAA(codon1);
 						std::string aa2 = BaseToAA(codon2);
-						mutAA = "p." + aa1 + std::to_string(mutPos / 3) + aa2;
-						mutAA3 = "p." + BaseToAA3(codon1) + std::to_string(mutPos / 3) + BaseToAA3(codon2);
+						mutAA = "p." + aa1 + std::to_string(mutPos / 3 + 1) + aa2;
+						mutAA3 = "p." + BaseToAA3(codon1) + std::to_string(mutPos / 3 + 1) + BaseToAA3(codon2);
 						mutType = GetMutType(aa1, aa2);
 					} else if (mutPos % 3 == 1) {
 						std::string base2 = fa.GetSeq(chrom, trans.txStart_ + pos);
@@ -324,8 +324,8 @@ bool Convert(const std::string& chrom, const Transcript& trans, int pos, const s
 						codon2 = base1 + alt + base3;
 						std::string aa1 = BaseToAA(codon1);
 						std::string aa2 = BaseToAA(codon2);
-						mutAA = "p." + aa1 + std::to_string(mutPos / 3) + aa2;
-						mutAA3 = "p." + BaseToAA3(codon1) + std::to_string(mutPos / 3) + BaseToAA3(codon2);
+						mutAA = "p." + aa1 + std::to_string(mutPos / 3 + 1) + aa2;
+						mutAA3 = "p." + BaseToAA3(codon1) + std::to_string(mutPos / 3 + 1) + BaseToAA3(codon2);
 						mutType = GetMutType(aa1, aa2);
 					} else {
 						std::string base3 = fa.GetSeq(chrom, trans.txStart_ + pos);
@@ -351,8 +351,8 @@ bool Convert(const std::string& chrom, const Transcript& trans, int pos, const s
 						codon2 = base1 + base2 + alt;
 						std::string aa1 = BaseToAA(codon1);
 						std::string aa2 = BaseToAA(codon2);
-						mutAA = "p." + aa1 + std::to_string(mutPos / 3) + aa2;
-						mutAA3 = "p." + BaseToAA3(codon1) + std::to_string(mutPos / 3) + BaseToAA3(codon2);
+						mutAA = "p." + aa1 + std::to_string(mutPos / 3 + 1) + aa2;
+						mutAA3 = "p." + BaseToAA3(codon1) + std::to_string(mutPos / 3 + 1) + BaseToAA3(codon2);
 						mutType = GetMutType(aa1, aa2);
 					}
 					break;
@@ -442,8 +442,8 @@ bool Convert(const std::string& chrom, const Transcript& trans, int pos, const s
 						codon2 = base1 + base2 + CompBase(alt);
 						std::string aa1 = BaseToAA(codon1);
 						std::string aa2 = BaseToAA(codon2);
-						mutAA = "p." + aa1 + std::to_string(mutPos / 3) + aa2;
-						mutAA3 = "p." + BaseToAA3(codon1) + std::to_string(mutPos / 3) + BaseToAA3(codon2);
+						mutAA = "p." + aa1 + std::to_string(mutPos / 3 + 1) + aa2;
+						mutAA3 = "p." + BaseToAA3(codon1) + std::to_string(mutPos / 3 + 1) + BaseToAA3(codon2);
 						mutType = GetMutType(aa1, aa2);
 					} else if (mutPos % 3 == 1) {
 						std::string base2 = CompBase(fa.GetSeq(chrom, trans.txStart_ + pos));
@@ -467,8 +467,8 @@ bool Convert(const std::string& chrom, const Transcript& trans, int pos, const s
 						codon2 = base1 + CompBase(alt) + base3;
 						std::string aa1 = BaseToAA(codon1);
 						std::string aa2 = BaseToAA(codon2);
-						mutAA = "p." + aa1 + std::to_string(mutPos / 3) + aa2;
-						mutAA3 = "p." + BaseToAA3(codon1) + std::to_string(mutPos / 3) + BaseToAA3(codon2);
+						mutAA = "p." + aa1 + std::to_string(mutPos / 3 + 1) + aa2;
+						mutAA3 = "p." + BaseToAA3(codon1) + std::to_string(mutPos / 3 + 1) + BaseToAA3(codon2);
 						mutType = GetMutType(aa1, aa2);
 					} else {
 						std::string base1 = CompBase(fa.GetSeq(chrom, trans.txStart_ + pos));
@@ -494,8 +494,8 @@ bool Convert(const std::string& chrom, const Transcript& trans, int pos, const s
 						codon2 = CompBase(alt) + base2 + base3;
 						std::string aa1 = BaseToAA(codon1);
 						std::string aa2 = BaseToAA(codon2);
-						mutAA = "p." + aa1 + std::to_string(mutPos / 3) + aa2;
-						mutAA3 = "p." + BaseToAA3(codon1) + std::to_string(mutPos / 3) + BaseToAA3(codon2);
+						mutAA = "p." + aa1 + std::to_string(mutPos / 3 + 1) + aa2;
+						mutAA3 = "p." + BaseToAA3(codon1) + std::to_string(mutPos / 3 + 1) + BaseToAA3(codon2);
 						mutType = GetMutType(aa1, aa2);
 					}
 					break;

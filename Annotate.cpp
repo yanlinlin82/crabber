@@ -505,7 +505,7 @@ bool Convert(const std::string& chrom, const Transcript& trans, int pos, const s
 	}
 
 	//assert(ref == seq.substr(pos, 1));
-	res += fa.GetSeq(chrom, trans.txStart_ + pos, 1) + ">" + alt;
+	res += fa.GetSeq(chrom, trans.txStart_ + pos, ref.size()) + ">" + alt;
 
 	for (size_t i = 0; i + 1 < fields.size(); ++i) {
 		std::cout << fields[i] << "\t";

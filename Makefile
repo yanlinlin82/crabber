@@ -2,7 +2,13 @@ TARGET = crabber
 MODULES = $(patsubst %.cpp,%,$(wildcard *.cpp))
 
 CXX = g++
-CXXFLAGS = -Wall -O2 -std=c++11
+CXXFLAGS = -Wall -std=c++11
+
+ifeq ("${DEBUG}","1")
+	CXXFLAGS += -g
+else
+	CXXFLAGS += -DNDEBUG -O2
+endif
 
 GEN_VERSION := $(shell bash version.sh version.h.in version.h)
 
